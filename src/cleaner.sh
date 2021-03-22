@@ -18,7 +18,7 @@ get_usb_drive() {
 		read choice
 
 		if [[ $choice == "yes" ]] ; then
-			eval "$1=$drive"
+			eval "$1=$drive $2=$choice"
 		fi
 	fi
 }
@@ -26,26 +26,33 @@ get_usb_drive() {
 wipe_disk() {
 
 	drive=""
-	get_usb_drive drive
+	choice=""
+	get_usb_drive drive choice
 
-	sudo dd if=/dev/zero of=$drive bs=1k count=2048 
-	echo "Eject and reinstall the disc. Then choose option 2."
-
+	if [[ $choice == "yes" ]] ; then 
+		sudo dd if=/dev/zero of=$drive bs=1k count=2048 
+		echo "Eject and reinstall the disc. Then choose option 2."
+	fi
+	
 	main
 }
 
 create_partition() {
 
 	drive=""
-	get_usb_drive drive
+	choice=""
+	get_usb_drive drive choice
 
-	partition="${drive}1"
+	if [[ $choice == "yes" ]] ; then 
+		partition="${drive}1"
 
-	sudo parted $drive mklabel msdos
-	sudo parted -a none $drive mkpart  primary fat32 0 2048
-	sudo mkfs.vfat -n "Disk" $partition
+		sudo parted $drive mklabel msdos
+		sudo parted -a none $drive mkpart  primary fat32 0 2048
+		sudo mkfs.vfat -n "Disk" $partition
 
-	echo "Congratulations you have wiped your disk clean and created a new partition on the disk."
+		echo "Congratulations you have wiped your disk clean and created a new partition on the disk."
+
+	fi
 }
 
 main() {

@@ -60,6 +60,7 @@ main() {
 	echo "1. Wipe the disk clean."
 	echo "2. Create a partition on the disk."
 
+	choice=0
 	read choice
 
 	if [[ $choice -eq 1 ]] ; then

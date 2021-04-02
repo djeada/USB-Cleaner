@@ -10,5 +10,6 @@ Follow the steps:
 
 ```bash
 cd src
+chmod +x cleaner.sh
 ./cleaner.sh
 ```

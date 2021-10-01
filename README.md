@@ -1,5 +1,5 @@
 # usb-cleaner
-Short bash script to wipe your usb sticks clean directly from the terminal.
+A little bash script for wiping your USB devices clean from the terminal.
 
 <h1>Installation</h1>
 
@@ -10,6 +10,6 @@ Follow the steps:
 
 ```bash
 cd src
-chmod +x cleaner.sh
+chmod u+x cleaner.sh
 ./cleaner.sh
 ```

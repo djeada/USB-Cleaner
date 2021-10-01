@@ -1,4 +1,4 @@
-# usb-cleaner
+# USB-Cleaner
 A little bash script for wiping your USB devices clean from the terminal.
 
 <h1>Installation</h1>

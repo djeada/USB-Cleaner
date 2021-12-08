@@ -27,5 +27,5 @@ The script will ask you for the USB device you want to wipe. If you don't have a
 It is an open source project, so feel free to contribute!
 
 <h1>License</h1>
-This project is licensed under the MIT license.
+This project is licensed under the <a href="https://github.com/djeada/USB-Cleaner/blob/main/LICENSE">MIT license</a>.
 

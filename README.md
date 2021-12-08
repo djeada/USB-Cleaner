@@ -14,12 +14,12 @@ You can switch to bash by typing the following command:
 
 1. Clone the repository:
 
-    git clone https://github.com/djeada/USB-Cleaner.git
+        git clone https://github.com/djeada/USB-Cleaner.git
 
 2. Run the script:
 
-    cd src
-    ./cleaner.sh
+        cd src
+        ./cleaner.sh
 
 The script will ask you for the USB device you want to wipe. If you don't have a USB device connected, you can type "exit" to exit the script. 
 

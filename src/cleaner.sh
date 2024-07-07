@@ -10,9 +10,9 @@ get_usb_drive() {
     local message="$1"
 
     echo "The following USB drives were found:"
-    usb_list=( $(ls -l /dev/disk/by-id/usb* | awk '{print $NF}' | sed 's/\.\.\///') )
+    usb_list=( $(ls /dev/disk/by-id/usb* | grep -o '/dev/sd[a-z]') )
     for i in "${!usb_list[@]}"; do
-        echo "$((i+1)). /dev/${usb_list[$i]}"
+        echo "$((i+1)). ${usb_list[$i]}"
     done
 
     echo "$message Please provide the number of the USB drive:"
@@ -22,7 +22,7 @@ get_usb_drive() {
         echo "Invalid selection. Please try again."
         get_usb_drive "$message"
     else
-        usb_drive="/dev/${usb_list[$((usb_number-1))]}"
+        usb_drive="${usb_list[$((usb_number-1))]}"
         echo "You have chosen $usb_drive. Type 'y' to confirm, or 'n' to cancel."
         read -r confirm
         if [ "$confirm" != 'y' ]; then

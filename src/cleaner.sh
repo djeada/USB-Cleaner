@@ -10,13 +10,26 @@ get_usb_drive() {
     local message="$1"
 
     echo "The following USB drives were found:"
-    ls -l /dev/disk/by-id/usb*
+    usb_list=( $(ls -l /dev/disk/by-id/usb* | awk '{print $NF}') )
+    for i in "${!usb_list[@]}"; do
+        echo "$((i+1)). ${usb_list[$i]}"
+    done
 
-    echo "$message Please provide the full path of the USB drive:"
-    read -r usb_drive
+    echo "$message Please provide the number of the USB drive:"
+    read -r usb_number
 
-    echo "You have chosen $usb_drive. Type 'y' to confirm, or 'n' to cancel."
-    read -r confirm
+    if [[ ! "$usb_number" =~ ^[0-9]+$ ]] || (( usb_number < 1 || usb_number > ${#usb_list[@]} )); then
+        echo "Invalid selection. Please try again."
+        get_usb_drive "$message"
+    else
+        usb_drive="${usb_list[$((usb_number-1))]}"
+        echo "You have chosen $usb_drive. Type 'y' to confirm, or 'n' to cancel."
+        read -r confirm
+        if [ "$confirm" != 'y' ]; then
+            echo "Operation cancelled."
+            get_usb_drive "$message"
+        fi
+    fi
 }
 
 # Function to securely wipe the selected USB drive.

@@ -4,17 +4,11 @@ A simple and efficient bash script designed to securely wipe USB devices directl
  
 ## Features
 
-- **Secure Data Wiping:** The script uses low-level data writing methods to securely wipe the contents of your USB drive, making it difficult for any data recovery tools to retrieve the erased data.
-  
-- **Partition Management:** After wiping a USB drive, the script offers the option to create a new partition, allowing you to format the drive with your preferred filesystem, such as FAT32, ext4, or NTFS.
-
-- **User Confirmation and Safety Checks:** Before any operation is performed, the script ensures that the user confirms the action. It also checks if the drive is mounted, preventing accidental data loss by unmounting partitions if necessary.
-
-- **Backup Option:** The script can create a backup image of the USB drive before wiping it, ensuring that your data is safely stored if needed.
-
-- **Dry Run Mode:** For users who want to see what actions will be performed without making any actual changes, a dry run mode is available.
-
-- **Interactive User Interface:** The script includes an interactive mode using `whiptail`, providing a more user-friendly experience with text-based menus.
+- The script uses low-level data writing methods to securely wipe the contents of your USB drive, making it difficult for any data recovery tools to retrieve the erased data.
+- After wiping a USB drive, the script offers the option to create a new partition, allowing you to format the drive with your preferred filesystem, such as FAT32, ext4, or NTFS.
+- Before any operation is performed, the script ensures that the user confirms the action. It also checks if the drive is mounted, preventing accidental data loss by unmounting partitions if necessary.
+- The script can create a backup image of the USB drive before wiping it, ensuring that your data is safely stored if needed.
+- For users who want to see what actions will be performed without making any actual changes, a dry run mode is available.
 
 ## Requirements
 

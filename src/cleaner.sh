@@ -155,10 +155,10 @@ choose_filesystem() {
     echo -n "Choice: "
     read -r fs_choice
     case $fs_choice in
-        1) fs_type="vfat"; fs_label="FAT32" ;;
-        2) fs_type="ext4"; fs_label="EXT4" ;;
-        3) fs_type="ntfs"; fs_label="NTFS" ;;
-        *) fs_type="vfat"; fs_label="FAT32" ;;
+        1) fs_type="fat32"; fs_mk="mkfs.vfat" ; fs_label="FAT32" ;;
+        2) fs_type="ext4"; fs_mk="mkfs.ext4" ; fs_label="EXT4" ;;
+        3) fs_type="ntfs"; fs_mk="mkfs.ntfs" ; fs_label="NTFS" ;;
+        *) fs_type="fat32"; fs_mk="mkfs.vfat"; fs_label="FAT32" ;;
     esac
 }
 
@@ -169,15 +169,21 @@ create_partition() {
         wipefs -a "$usb_drive"
         sync
         parted "$usb_drive" --script mklabel msdos || return 1
-        parted "$usb_drive" --script mkpart primary "$fs_type" 0% 100% || return 1
+        if [ "$fs_type" = "fat32" ]; then
+            parted "$usb_drive" --script mkpart primary fat32 0% 100% || return 1
+        elif [ "$fs_type" = "ext4" ]; then
+            parted "$usb_drive" --script mkpart primary ext4 0% 100% || return 1
+        elif [ "$fs_type" = "ntfs" ]; then
+            parted "$usb_drive" --script mkpart primary ntfs 0% 100% || return 1
+        fi
         sync
         partition="${usb_drive}1"
-        if [ "$fs_type" = "vfat" ]; then
-            mkfs.vfat -n "$fs_label" "$partition"
+        if [ "$fs_type" = "fat32" ]; then
+            $fs_mk -n "$fs_label" "$partition"
         elif [ "$fs_type" = "ext4" ]; then
-            mkfs.ext4 -L "$fs_label" "$partition"
+            $fs_mk -L "$fs_label" "$partition"
         elif [ "$fs_type" = "ntfs" ]; then
-            mkfs.ntfs -f -L "$fs_label" "$partition"
+            $fs_mk -f -L "$fs_label" "$partition"
         fi
         sync
         log "Partition created: $partition with $fs_label"

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 
+if [[ $EUID -ne 0 ]]; then
+    exec sudo "$0" "$@"
+fi
+
 LOGFILE="/var/log/cleaner.log"
-DRY_RUN=false
 usb_drives=()
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
@@ -10,21 +13,11 @@ log() {
     echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOGFILE"
 }
 
-dry_run_check() {
-    if $DRY_RUN; then
-        log "[Dry Run] $1"
-    else
-        log "Executing: $1"
-        eval "$1"
-    fi
-}
-
 check_dependencies() {
-    deps=(whiptail lsblk parted mkfs.vfat mkfs.ext4 mkfs.ntfs dd pv)
+    deps=(lsblk parted mkfs.vfat mkfs.ext4 mkfs.ntfs dd pv wipefs)
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
-            log "Dependency $dep not found. Installing..."
-            dry_run_check "sudo apt-get install -y $dep"
+            apt-get install -y $dep
         fi
     done
 }
@@ -33,100 +26,134 @@ get_usb_drives() {
     usb_list=($(lsblk -dplno NAME,TRAN | grep ' usb$' | awk '{print $1}'))
     if [ ${#usb_list[@]} -eq 0 ]; then
         log "No USB drives found."
-        exit 1
+        return 1
     fi
-
-    options=()
-    for drive in "${usb_list[@]}"; do
+    echo "Available USB Drives:"
+    for i in "${!usb_list[@]}"; do
+        drive="${usb_list[$i]}"
         size=$(lsblk -dno SIZE "$drive")
         model=$(udevadm info --query=property --name="$drive" | grep 'ID_MODEL=' | cut -d'=' -f2)
-        options+=("$drive" "$model ($size)")
+        echo "$((i+1)). $drive - $model ($size)"
     done
-
-    selected_drives=$(whiptail --title "Select USB Drives" --checklist "Choose drives to clean:" 20 78 10 "${options[@]}" 3>&1 1>&2 2>&3)
-    if [ $? -ne 0 ]; then
-        log "Operation cancelled by user."
-        exit 1
+    echo -n "Select drives by space-separated numbers: "
+    read -r selection
+    if [ -z "$selection" ]; then
+        log "No selection made."
+        return 1
     fi
-
-    IFS=" " read -r -a usb_drives <<< "$selected_drives"
+    usb_drives=()
+    for sel in $selection; do
+        if ! [[ $sel =~ ^[0-9]+$ ]]; then
+            log "Invalid selection."
+            return 1
+        fi
+        if [ $sel -le 0 ] || [ $sel -gt ${#usb_list[@]} ]; then
+            log "Invalid selection."
+            return 1
+        fi
+        usb_drives+=("${usb_list[$((sel-1))]}")
+    done
     for usb_drive in "${usb_drives[@]}"; do
-        confirm=$(whiptail --title "Confirm Drive" --yesno "You have chosen $usb_drive. Proceed?" 8 60 3>&1 1>&2 2>&3)
-        if [ $? -ne 0 ]; then
+        echo -n "You have chosen $usb_drive. Proceed? [y/n]: "
+        read -r confirm
+        if [ "$confirm" != "y" ]; then
             log "Operation cancelled by user."
-            get_usb_drives
-            return
+            return 1
         fi
     done
 }
 
 check_mounted() {
-    mount_points=$(lsblk -no MOUNTPOINT "$usb_drive" | grep -v '^$')
-    if [ -n "$mount_points" ]; then
-        unmount=$(whiptail --title "Unmount Partitions" --yesno "Partitions on $usb_drive are mounted:\n$mount_points\nUnmount automatically?" 12 60 3>&1 1>&2 2>&3)
-        if [ $? -eq 0 ]; then
-            dry_run_check "sudo umount ${usb_drive}*"
-        else
-            log "Please unmount partitions manually and retry."
-            exit 1
+    parts=$(lsblk -lno NAME "$usb_drive" | tail -n +2)
+    for p in $parts; do
+        mp=$(lsblk -no MOUNTPOINT "/dev/$p")
+        if [ -n "$mp" ]; then
+            log "Found mounted partition /dev/$p at $mp"
+            echo -n "Unmount automatically? [y/n]: "
+            read -r unmount
+            if [ "$unmount" = "y" ]; then
+                log "Unmounting /dev/$p"
+                umount -f "/dev/$p" || true
+            else
+                log "Please unmount partitions manually."
+                return 1
+            fi
         fi
+    done
+}
+
+backup_usb_drive() {
+    echo -n "Backup $usb_drive before wiping? [y/n]: "
+    read -r backup
+    if [ "$backup" = "y" ]; then
+        backup_file="$TEMP_DIR/backup_$(basename "$usb_drive")_$(date +'%Y%m%d%H%M%S').img"
+        log "Backing up $usb_drive to $backup_file"
+        dd if="$usb_drive" of="$backup_file" bs=4M status=progress conv=fsync
+        sync
+        log "Backup completed: $backup_file"
     fi
 }
 
 wipe_disk() {
     for usb_drive in "${usb_drives[@]}"; do
-        check_mounted
+        check_mounted || return 1
         backup_usb_drive
-
-        wipe_method=$(whiptail --title "Select Wipe Method" --menu "Choose a wipe method for $usb_drive:" 15 60 4 \
-            "1" "Single Pass (Zero Fill)" \
-            "2" "Triple Pass (DoD 5220.22-M)" \
-            "3" "Seven Pass (Guttman)" 3>&1 1>&2 2>&3)
-
-        if [ $? -ne 0 ]; then
-            log "Operation cancelled by user."
-            exit 1
+        echo "Wipe method:"
+        echo "1) Single Pass (Zero)"
+        echo "2) Triple Pass (DoD)"
+        echo "3) Seven Pass (Guttman)"
+        echo -n "Choice: "
+        read -r wipe_method
+        if ! [[ $wipe_method =~ ^[1-3]$ ]]; then
+            log "Invalid choice."
+            return 1
         fi
-
+        wipefs -a "$usb_drive"
+        sync
         case $wipe_method in
             1)
-                log "Starting single pass wipe on $usb_drive"
-                dry_run_check "sudo dd if=/dev/zero | pv --rate --eta | sudo dd of=\"$usb_drive\" bs=4M status=none"
+                log "Wiping $usb_drive single pass zero"
+                dd if=/dev/zero of="$usb_drive" bs=4M status=progress conv=fsync
+                sync
                 ;;
             2)
-                log "Starting triple pass wipe on $usb_drive"
+                log "Wiping $usb_drive triple pass"
                 for pass in {1..3}; do
                     log "Pass $pass of 3"
                     if [ $pass -eq 2 ]; then
-                        dry_run_check "sudo dd if=/dev/urandom | pv --rate --eta | sudo dd of=\"$usb_drive\" bs=4M status=none"
+                        dd if=/dev/urandom of="$usb_drive" bs=4M status=progress conv=fsync
                     else
-                        dry_run_check "sudo dd if=/dev/zero | pv --rate --eta | sudo dd of=\"$usb_drive\" bs=4M status=none"
+                        dd if=/dev/zero of="$usb_drive" bs=4M status=progress conv=fsync
                     fi
+                    sync
                 done
                 ;;
             3)
-                log "Starting seven pass wipe on $usb_drive"
+                log "Wiping $usb_drive seven pass"
                 for pass in {1..7}; do
                     log "Pass $pass of 7"
                     if [ $((pass % 2)) -eq 0 ]; then
-                        dry_run_check "sudo dd if=/dev/urandom | pv --rate --eta | sudo dd of=\"$usb_drive\" bs=4M status=none"
+                        dd if=/dev/urandom of="$usb_drive" bs=4M status=progress conv=fsync
                     else
-                        dry_run_check "sudo dd if=/dev/zero | pv --rate --eta | sudo dd of=\"$usb_drive\" bs=4M status=none"
+                        dd if=/dev/zero of="$usb_drive" bs=4M status=progress conv=fsync
                     fi
+                    sync
                 done
                 ;;
         esac
+        sync
         log "Wipe completed for $usb_drive"
         create_partition_prompt
     done
 }
 
 choose_filesystem() {
-    fs_choice=$(whiptail --title "Select Filesystem" --menu "Choose a filesystem for the new partition:" 15 60 4 \
-        "1" "FAT32" \
-        "2" "ext4" \
-        "3" "NTFS" 3>&1 1>&2 2>&3)
-
+    echo "Filesystem:"
+    echo "1) FAT32"
+    echo "2) ext4"
+    echo "3) NTFS"
+    echo -n "Choice: "
+    read -r fs_choice
     case $fs_choice in
         1) fs_type="vfat"; fs_label="FAT32" ;;
         2) fs_type="ext4"; fs_label="EXT4" ;;
@@ -138,49 +165,47 @@ choose_filesystem() {
 create_partition() {
     for usb_drive in "${usb_drives[@]}"; do
         choose_filesystem
+        log "Creating partition on $usb_drive"
+        wipefs -a "$usb_drive"
+        sync
+        parted "$usb_drive" --script mklabel msdos || return 1
+        parted "$usb_drive" --script mkpart primary "$fs_type" 0% 100% || return 1
+        sync
         partition="${usb_drive}1"
-        dry_run_check "sudo parted \"$usb_drive\" --script mklabel msdos mkpart primary \"$fs_type\" 0% 100%"
-
-        case $fs_type in
-            vfat) dry_run_check "sudo mkfs.vfat -n \"$fs_label\" \"$partition\"" ;;
-            ext4) dry_run_check "sudo mkfs.ext4 -L \"$fs_label\" \"$partition\"" ;;
-            ntfs) dry_run_check "sudo mkfs.ntfs -f -L \"$fs_label\" \"$partition\"" ;;
-        esac
-
-        log "Partition created on $usb_drive with $fs_label filesystem"
+        if [ "$fs_type" = "vfat" ]; then
+            mkfs.vfat -n "$fs_label" "$partition"
+        elif [ "$fs_type" = "ext4" ]; then
+            mkfs.ext4 -L "$fs_label" "$partition"
+        elif [ "$fs_type" = "ntfs" ]; then
+            mkfs.ntfs -f -L "$fs_label" "$partition"
+        fi
+        sync
+        log "Partition created: $partition with $fs_label"
     done
 }
 
 create_partition_prompt() {
-    create_part=$(whiptail --title "Create Partition" --yesno "Do you want to create a new partition on the wiped drive(s)?" 8 60 3>&1 1>&2 2>&3)
-    if [ $? -eq 0 ]; then
+    echo -n "Create partition? [y/n]: "
+    read -r create_part
+    if [ "$create_part" = "y" ]; then
         create_partition
-    fi
-}
-
-backup_usb_drive() {
-    backup=$(whiptail --title "Backup Drive" --yesno "Do you want to backup $usb_drive before wiping?" 8 60 3>&1 1>&2 2>&3)
-    if [ $? -eq 0 ]; then
-        backup_file="$TEMP_DIR/backup_$(basename $usb_drive)_$(date +'%Y%m%d%H%M%S').img"
-        dry_run_check "sudo dd if=\"$usb_drive\" | pv --rate --eta | sudo dd of=\"$backup_file\" bs=4M status=none"
-        log "Backup saved to $backup_file"
     fi
 }
 
 main_menu() {
     while true; do
-        choice=$(whiptail --title "USB Cleaner" --menu "Choose an option:" 15 60 4 \
-            "1" "Wipe USB drive(s)" \
-            "2" "Create partition on USB drive(s)" \
-            "3" "Exit" 3>&1 1>&2 2>&3)
-
+        echo "1) Wipe USB drive(s)"
+        echo "2) Create partition on USB drive(s)"
+        echo "3) Exit"
+        echo -n "Choice: "
+        read -r choice
         case $choice in
             1)
-                get_usb_drives
+                get_usb_drives || continue
                 wipe_disk
                 ;;
             2)
-                get_usb_drives
+                get_usb_drives || continue
                 create_partition
                 ;;
             3)
@@ -194,16 +219,4 @@ main_menu() {
 }
 
 check_dependencies
-
-if [ "$1" == "--dry-run" ]; then
-    DRY_RUN=true
-    log "Dry run mode activated."
-fi
-
-sudo -v
-if [[ $? -ne 0 ]]; then
-    log "You need sudo privileges to run this script."
-    exit 1
-fi
-
 main_menu

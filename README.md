@@ -1,7 +1,9 @@
 # USB-Cleaner
 
 A simple and efficient bash script designed to securely wipe USB devices directly from the terminal. This script ensures complete data erasure, making your USB devices clean and safe for reuse or disposal. 
- 
+
+![usb_cleaner](https://github.com/user-attachments/assets/022549ba-1703-4681-935b-776f78d862ba)
+
 ## Features
 
 - The script uses low-level data writing methods to securely wipe the contents of your USB drive, making it difficult for any data recovery tools to retrieve the erased data.

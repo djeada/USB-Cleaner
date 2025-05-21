@@ -31,7 +31,6 @@ To run the `cleaner.sh` script, ensure your system meets the following requireme
      - `mkfs`: To create file systems (supports FAT32, ext4, NTFS, etc.).
      - `dd`: For low-level copying of data.
      - `grep`, `awk`, `sed`: For text processing within the script.
-     - `whiptail` (optional): To provide a text-based user interface. If `whiptail` is not installed, the script will default to standard command-line prompts.
 
 ### 4. **Disk Space**
    - Sufficient disk space on the system to handle backups if the backup option is used.

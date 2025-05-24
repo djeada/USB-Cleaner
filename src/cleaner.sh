@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# Help/usage handler
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    echo "Usage: sudo ./cleaner.sh [options]"
+    echo "A tool to wipe and partition USB drives."
+    echo "Options:"
+    echo "  -h, --help    Show this help message and exit."
+    exit 0
+fi
+
 if [[ $EUID -ne 0 ]]; then
     exec sudo "$0" "$@"
 fi

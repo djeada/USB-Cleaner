@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
-if [[ $EUID -ne 0 ]]; then
+# Only check sudo when running directly (not when being sourced for testing)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]] && [[ $EUID -ne 0 ]]; then
     exec sudo "$0" "$@"
 fi
 
-LOGFILE="/var/log/cleaner.log"
+LOGFILE="${LOGFILE:-/var/log/cleaner.log}"
 usb_drives=()
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
@@ -224,5 +225,8 @@ main_menu() {
     done
 }
 
-check_dependencies
-main_menu
+# Only run main if script is executed directly, not sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_dependencies
+    main_menu
+fi

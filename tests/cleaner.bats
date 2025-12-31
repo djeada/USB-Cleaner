@@ -3,13 +3,19 @@
 # Test suite for USB Cleaner script
 # Uses BATS (Bash Automated Testing System)
 
+# Timestamp regex pattern for log format validation
+TIMESTAMP_PATTERN="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"
+
 setup() {
     # Create a temporary directory for test logs
     TEST_TEMP_DIR=$(mktemp -d)
     export LOGFILE="$TEST_TEMP_DIR/test_cleaner.log"
     
+    # Set script path for tests that need to run in subshell
+    SCRIPT_PATH="$BATS_TEST_DIRNAME/../src/cleaner.sh"
+    
     # Source the cleaner script to get access to functions
-    source "$BATS_TEST_DIRNAME/../src/cleaner.sh"
+    source "$SCRIPT_PATH"
 }
 
 teardown() {
@@ -17,6 +23,13 @@ teardown() {
     if [[ -d "$TEST_TEMP_DIR" ]]; then
         rm -rf "$TEST_TEMP_DIR"
     fi
+}
+
+# Helper function to test choose_filesystem with given input
+# Usage: run_choose_filesystem "1"
+run_choose_filesystem() {
+    local input="$1"
+    run bash -c 'source "'"$SCRIPT_PATH"'"; choose_filesystem <<<"'"$input"'"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
 }
 
 # Test: log function writes to log file
@@ -34,8 +47,8 @@ teardown() {
 @test "log function includes timestamp in output" {
     log "Timestamp test"
     
-    # Check for timestamp format (YYYY-MM-DD HH:MM:SS)
-    grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} - Timestamp test$" "$LOGFILE"
+    # Check for timestamp format using pattern variable
+    grep -qE "^${TIMESTAMP_PATTERN} - Timestamp test$" "$LOGFILE"
 }
 
 # Test: log function handles empty messages
@@ -78,8 +91,7 @@ teardown() {
 
 # Test: choose_filesystem sets fs_type for FAT32
 @test "choose_filesystem sets fs_type for FAT32 (choice 1)" {
-    local script_path="$BATS_TEST_DIRNAME/../src/cleaner.sh"
-    run bash -c 'source "'"$script_path"'"; choose_filesystem <<<"1"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem "1"
     [[ "$output" == *"fs_type=fat32"* ]]
     [[ "$output" == *"fs_mk=mkfs.vfat"* ]]
     [[ "$output" == *"fs_label=FAT32"* ]]
@@ -87,8 +99,7 @@ teardown() {
 
 # Test: choose_filesystem sets fs_type for ext4
 @test "choose_filesystem sets fs_type for ext4 (choice 2)" {
-    local script_path="$BATS_TEST_DIRNAME/../src/cleaner.sh"
-    run bash -c 'source "'"$script_path"'"; choose_filesystem <<<"2"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem "2"
     [[ "$output" == *"fs_type=ext4"* ]]
     [[ "$output" == *"fs_mk=mkfs.ext4"* ]]
     [[ "$output" == *"fs_label=EXT4"* ]]
@@ -96,8 +107,7 @@ teardown() {
 
 # Test: choose_filesystem sets fs_type for NTFS
 @test "choose_filesystem sets fs_type for NTFS (choice 3)" {
-    local script_path="$BATS_TEST_DIRNAME/../src/cleaner.sh"
-    run bash -c 'source "'"$script_path"'"; choose_filesystem <<<"3"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem "3"
     [[ "$output" == *"fs_type=ntfs"* ]]
     [[ "$output" == *"fs_mk=mkfs.ntfs"* ]]
     [[ "$output" == *"fs_label=NTFS"* ]]
@@ -105,8 +115,7 @@ teardown() {
 
 # Test: choose_filesystem defaults to FAT32 for invalid input
 @test "choose_filesystem defaults to FAT32 for invalid input" {
-    local script_path="$BATS_TEST_DIRNAME/../src/cleaner.sh"
-    run bash -c 'source "'"$script_path"'"; choose_filesystem <<<"invalid"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem "invalid"
     [[ "$output" == *"fs_type=fat32"* ]]
     [[ "$output" == *"fs_mk=mkfs.vfat"* ]]
     [[ "$output" == *"fs_label=FAT32"* ]]
@@ -114,8 +123,7 @@ teardown() {
 
 # Test: choose_filesystem defaults to FAT32 for out of range input
 @test "choose_filesystem defaults to FAT32 for out of range input" {
-    local script_path="$BATS_TEST_DIRNAME/../src/cleaner.sh"
-    run bash -c 'source "'"$script_path"'"; choose_filesystem <<<"99"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem "99"
     [[ "$output" == *"fs_type=fat32"* ]]
     [[ "$output" == *"fs_mk=mkfs.vfat"* ]]
     [[ "$output" == *"fs_label=FAT32"* ]]

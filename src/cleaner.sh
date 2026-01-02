@@ -289,7 +289,15 @@ check_dependencies() {
             case "$dep" in
                 smartctl) apt-get install -y -qq smartmontools ;;
                 mkfs.ntfs) apt-get install -y -qq ntfs-3g ;;
-                mkfs.exfat) apt-get install -y -qq exfat-utils ;;
+                mkfs.exfat)
+                    # exfatprogs is the modern replacement for exfat-utils (Ubuntu 20.04+, Debian 11+)
+                    # Try exfatprogs first, fall back to exfat-utils for older distros
+                    if apt-get install -y -qq exfatprogs 2>/dev/null; then
+                        :
+                    else
+                        apt-get install -y -qq exfat-utils 2>/dev/null || true
+                    fi
+                    ;;
                 mkfs.btrfs) apt-get install -y -qq btrfs-progs ;;
                 *) apt-get install -y -qq "$dep" ;;
             esac
@@ -742,17 +750,33 @@ wipe_disk() {
                 log "Wiping $usb_drive - Custom Pattern ($custom_pattern)"
                 echo -e "\n${YELLOW}▶ Pass 1/1: Custom pattern fill...${RESET}"
                 
-                # Create a larger pattern file for efficiency
+                # Create a 4MB pattern file for efficient writing
+                # This is much more efficient than calling dd in a loop
                 local large_pattern="$TEMP_DIR/large_pattern.bin"
-                for i in {1..1024}; do cat "$pattern_file"; done > "$large_pattern"
+                local pattern_size=$(stat -c%s "$pattern_file" 2>/dev/null || echo 4)
+                local repeats=$((4194304 / pattern_size + 1))  # 4MB / pattern size
                 
-                # Write pattern repeatedly
+                # Build the 4MB pattern file efficiently
+                {
+                    for ((i=0; i<repeats; i++)); do
+                        cat "$pattern_file"
+                    done
+                } | head -c 4194304 > "$large_pattern"
+                
+                # Write using a single dd command with pattern repetition via process substitution
+                # This pipes the pattern file repeatedly to dd, much more efficient than block-by-block
                 local blocks=$((drive_bytes / 4194304))
-                for ((b=0; b<blocks; b++)); do
-                    dd if="$large_pattern" of="$usb_drive" bs=4M seek=$b count=1 conv=notrunc 2>/dev/null
-                    printf "\r${CYAN}Progress: %d/%d blocks${RESET}" "$((b+1))" "$blocks"
-                done
-                echo
+                (
+                    for ((b=0; b<blocks; b++)); do
+                        cat "$large_pattern"
+                    done
+                    # Handle remaining bytes
+                    local remaining=$((drive_bytes % 4194304))
+                    if [[ $remaining -gt 0 ]]; then
+                        head -c "$remaining" "$large_pattern"
+                    fi
+                ) | dd of="$usb_drive" bs=4M status=progress conv=fsync 2>&1
+                
                 sync
                 ;;
         esac
@@ -874,7 +898,12 @@ create_partition() {
                 parted "$usb_drive" --script mkpart primary ntfs 0% 100%
                 ;;
             exfat)
-                parted "$usb_drive" --script mkpart primary fat32 0% 100%  # parted doesn't support exfat type
+                # Note: parted doesn't natively support exFAT partition type, so we use 'fat32'
+                # as a placeholder. The actual filesystem type is determined by mkfs.exfat which
+                # properly formats the partition as exFAT regardless of the partition type hint.
+                # This is safe because the partition type is just metadata - the filesystem
+                # signature written by mkfs.exfat is what matters for OS detection.
+                parted "$usb_drive" --script mkpart primary fat32 0% 100%
                 ;;
             btrfs|xfs)
                 parted "$usb_drive" --script mkpart primary 0% 100%
@@ -988,8 +1017,12 @@ secure_erase() {
     
     get_usb_drives || return 1
     
-    for usb_drive in "${usb_drives[@]}"; do
-        usb_drives=("$usb_drive")  # Process one at a time for safety
+    # Store original list to iterate over
+    local drives_to_process=("${usb_drives[@]}")
+    
+    for usb_drive in "${drives_to_process[@]}"; do
+        # Set usb_drives to current drive for create_partition compatibility
+        usb_drives=("$usb_drive")
         
         # Force 7-pass wipe
         check_mounted "$usb_drive" || continue

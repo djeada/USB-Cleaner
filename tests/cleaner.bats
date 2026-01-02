@@ -226,36 +226,52 @@ run_choose_filesystem() {
     [[ "$status" -eq 0 ]]
 }
 
+# Helper function to test choose_filesystem with new options
+# Usage: run_choose_filesystem_ext "4"
+run_choose_filesystem_ext() {
+    local input="$1"
+    local script_path="$SCRIPT_PATH"
+    run bash -c "source '$script_path'; choose_filesystem <<<'$input'; echo \"fs_type=\$fs_type fs_mk=\$fs_mk fs_label=\$fs_label\""
+}
+
+# Helper function to test choose_partition_table
+# Usage: run_choose_partition_table "1"
+run_choose_partition_table() {
+    local input="$1"
+    local script_path="$SCRIPT_PATH"
+    run bash -c "source '$script_path'; choose_partition_table <<<'$input'; echo \"partition_table=\$partition_table\""
+}
+
 # Test: choose_filesystem supports exFAT (choice 4)
 @test "choose_filesystem sets fs_type for exFAT (choice 4)" {
-    run bash -c 'source "'"$SCRIPT_PATH"'"; choose_filesystem <<<"4"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem_ext "4"
     [[ "$output" == *"fs_type=exfat"* ]]
     [[ "$output" == *"fs_label=EXFAT"* ]]
 }
 
 # Test: choose_filesystem supports Btrfs (choice 5)
 @test "choose_filesystem sets fs_type for Btrfs (choice 5)" {
-    run bash -c 'source "'"$SCRIPT_PATH"'"; choose_filesystem <<<"5"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem_ext "5"
     [[ "$output" == *"fs_type=btrfs"* ]]
     [[ "$output" == *"fs_label=BTRFS"* ]]
 }
 
 # Test: choose_filesystem supports XFS (choice 6)
 @test "choose_filesystem sets fs_type for XFS (choice 6)" {
-    run bash -c 'source "'"$SCRIPT_PATH"'"; choose_filesystem <<<"6"; echo "fs_type=$fs_type fs_mk=$fs_mk fs_label=$fs_label"'
+    run_choose_filesystem_ext "6"
     [[ "$output" == *"fs_type=xfs"* ]]
     [[ "$output" == *"fs_label=XFS"* ]]
 }
 
 # Test: choose_partition_table selects MBR by default
 @test "choose_partition_table defaults to MBR" {
-    run bash -c 'source "'"$SCRIPT_PATH"'"; choose_partition_table <<<"1"; echo "partition_table=$partition_table"'
+    run_choose_partition_table "1"
     [[ "$output" == *"partition_table=msdos"* ]]
 }
 
 # Test: choose_partition_table selects GPT
 @test "choose_partition_table supports GPT (choice 2)" {
-    run bash -c 'source "'"$SCRIPT_PATH"'"; choose_partition_table <<<"2"; echo "partition_table=$partition_table"'
+    run_choose_partition_table "2"
     [[ "$output" == *"partition_table=gpt"* ]]
 }
 
